@@ -1,4 +1,3 @@
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -6,512 +5,314 @@ import java.nio.file.Paths;
 import java.util.*;
 
 /**
- * COMP-3110 Line Mapping Project
+ * COMP-3110 Line Mapping Tool
  *
- * Generic strategy (no per-file hacks):
- *   1. Preprocess lines: normalize, tokenize, classify "noise".
- *      - Noise = blank / brace-only / punctuation-only lines.
- *      - Comment lines are kept (NOT treated as noise).
- *
- *   2. Find strong "unchanged" anchors via LCS on normalized text
- *      for non-noise lines.
- *
- *   3. For unmapped lines, search for the best match in a local
- *      window using a hybrid similarity:
- *         - token-based Dice coefficient
- *         - character-level LCS ratio
- *         - special treatment for exact-normalized equality
- *      Reuse of new lines is allowed but softly penalized.
- *
- *   4. Global "rescue" pass for still-unmapped lines:
- *      - search all new lines, stricter threshold
- *
- *   5. Fill small unmapped gaps between two anchors by interpolation
- *      with similarity checks. Allows "many old -> one new" collapses
- *      when that is consistently the best match.
- *
- * Output (for each original line i, 1-based):
- *      i \t newLineIndexOrMinusOne
+ * Light comments: explains structure without excessive detail.
+ * Strategy:
+ *  - Step 1: Preprocess lines + normalize
+ *  - Step 2: Identify strong "unchanged" anchors using LCS
+ *  - Step 3: Local matching around anchors using similarity scoring
+ *  - Step 4: Block relocation for large moved sections
+ *  - Step 5: Small-gap interpolation
+ *  - Step 6: Strict global fallback for remaining lines
  */
 public class LineMappingTool {
 
-    /* ========================  ENTRY POINT  ======================== */
+    /** Simple record for output pair. */
+    public record Mapping(int oldLine, int newLine) {}
 
-    public static void main(String[] args) throws Exception {
-        if (args.length < 2) {
-            System.err.println("Usage: java LineMappingTool <origFile> <newFile>");
-            return;
-        }
-
-        List<String> origLines = readAllLines(args[0]);
-        List<String> newLines  = readAllLines(args[1]);
-
-        int[] mapping = computeMapping(origLines, newLines);
-
-        for (int i = 0; i < mapping.length; i++) {
-            int orig1 = i + 1;
-            int new1  = (mapping[i] < 0) ? -1 : mapping[i] + 1;
-            System.out.println(orig1 + "\t" + new1);
-        }
+    /** Read file into list of strings. */
+    private static List<String> read(String p) throws IOException {
+        return Files.readAllLines(Paths.get(p), StandardCharsets.UTF_8);
     }
 
-    private static List<String> readAllLines(String path) throws IOException {
-        List<String> result = new ArrayList<>();
-        try (BufferedReader br = Files.newBufferedReader(Paths.get(path), StandardCharsets.UTF_8)) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                result.add(line);
-            }
-        }
-        return result;
-    }
-
-    /* ========================  CORE ALGORITHM  ======================== */
-
-    public static int[] computeMapping(List<String> origLines, List<String> newLines) {
-        int n = origLines.size();
-        int m = newLines.size();
-
-        int[] map = new int[n];
-        Arrays.fill(map, -1);
-
-        LineInfo[] orig = buildLineInfos(origLines);
-        LineInfo[] news = buildLineInfos(newLines);
-
-        // 1) LCS anchors on normalized (non-noise) lines
-        int[] lcsMap = lcsAnchors(orig, news);
-        boolean[] newUsed = new boolean[m];
-        int[] usedCount = new int[m];
-
-        for (int i = 0; i < n; i++) {
-            if (lcsMap[i] != -1) {
-                map[i] = lcsMap[i];
-                newUsed[lcsMap[i]] = true;
-                usedCount[lcsMap[i]]++;
-            }
-        }
-
-        // Precompute nearest mapped neighbors
-        int[] leftMapped  = nearestMappedLeft(map);
-        int[] rightMapped = nearestMappedRight(map);
-
-        // 2) Local window heuristic for unmapped, non-noise lines
-        for (int i = 0; i < n; i++) {
-            if (map[i] != -1) continue;
-            if (orig[i].isNoise) continue;
-
-            int windowStart = 0;
-            int windowEnd   = m - 1;
-
-            int left = leftMapped[i];
-            int right = rightMapped[i];
-
-            // Narrow window based on mapped neighbors if available
-            if (left != -1) {
-                int leftNew = map[left];
-                windowStart = Math.max(windowStart, leftNew - 50);
-            }
-            if (right != -1) {
-                int rightNew = map[right];
-                windowEnd = Math.min(windowEnd, rightNew + 50);
-            }
-
-            if (windowStart > windowEnd) {
-                windowStart = 0;
-                windowEnd   = m - 1;
-            }
-
-            int bestJ = -1;
-            double bestScore = 0.0;
-
-            for (int j = windowStart; j <= windowEnd; j++) {
-                if (j < 0 || j >= m) continue;
-                if (news[j].isNoise) continue; // skip brace-only / blank
-
-                double score = similarity(orig[i], news[j]);
-                if (score <= 0.0) continue;
-
-                boolean exactSameNorm = !orig[i].norm.isEmpty()
-                        && orig[i].norm.equals(news[j].norm);
-
-                double penalized = score;
-                if (!exactSameNorm && usedCount[j] > 0) {
-                    // softly penalize heavily reused lines, but never forbid
-                    penalized -= 0.03 * Math.min(usedCount[j], 5);
-                    if (penalized < 0.0) penalized = 0.0;
-                }
-
-                if (penalized > bestScore) {
-                    bestScore = penalized;
-                    bestJ = j;
-                }
-            }
-
-            if (bestJ != -1) {
-                boolean exactSameNorm = !orig[i].norm.isEmpty()
-                        && orig[i].norm.equals(news[bestJ].norm);
-
-                // main heuristic thresholds
-                if (exactSameNorm || bestScore >= 0.60) {
-                    map[i] = bestJ;
-                    newUsed[bestJ] = true;
-                    usedCount[bestJ]++;
-                }
-            }
-        }
-
-        // 3) Global rescue pass for still-unmapped, non-noise lines
-        for (int i = 0; i < n; i++) {
-            if (map[i] != -1) continue;
-            if (orig[i].isNoise) continue;
-
-            int bestJ = -1;
-            double bestScore = 0.0;
-
-            for (int j = 0; j < m; j++) {
-                if (news[j].isNoise) continue;
-
-                double score = similarity(orig[i], news[j]);
-                if (score <= 0.0) continue;
-
-                boolean exactSameNorm = !orig[i].norm.isEmpty()
-                        && orig[i].norm.equals(news[j].norm);
-
-                double penalized = score;
-                if (!exactSameNorm && usedCount[j] > 0) {
-                    penalized -= 0.03 * Math.min(usedCount[j], 5);
-                    if (penalized < 0.0) penalized = 0.0;
-                }
-
-                if (penalized > bestScore) {
-                    bestScore = penalized;
-                    bestJ = j;
-                }
-            }
-
-            if (bestJ != -1) {
-                boolean exactSameNorm = !orig[i].norm.isEmpty()
-                        && orig[i].norm.equals(news[bestJ].norm);
-
-                if (exactSameNorm || bestScore >= 0.70) {
-                    map[i] = bestJ;
-                    newUsed[bestJ] = true;
-                    usedCount[bestJ]++;
-                }
-            }
-        }
-
-        // 4) Fill small gaps between two mapped anchors by interpolation
-        fillSmallGaps(orig, news, map, usedCount);
-
-        return map;
-    }
-
-    /* ========================  LINE INFO  ======================== */
-
-    private static class LineInfo {
-        final int index;
-        final String raw;
-        final String norm;
-        final String[] tokens;
-        final boolean isNoise;
-
-        LineInfo(int index, String raw, String norm, String[] tokens, boolean isNoise) {
-            this.index = index;
-            this.raw = raw;
-            this.norm = norm;
-            this.tokens = tokens;
-            this.isNoise = isNoise;
-        }
-    }
-
-    private static LineInfo[] buildLineInfos(List<String> lines) {
-        LineInfo[] arr = new LineInfo[lines.size()];
-        for (int i = 0; i < lines.size(); i++) {
-            String raw = lines.get(i);
-            String norm = normalize(raw);
-            boolean isNoise = isNoiseLine(norm);
-            String[] tokens = tokenize(norm);
-            arr[i] = new LineInfo(i, raw, norm, tokens, isNoise);
-        }
-        return arr;
-    }
-
-    private static String normalize(String s) {
+    /** Normalize line for matching consistency. */
+    private static String norm(String s) {
         if (s == null) return "";
-        String line = s;
-
-        // Strip line comments
-        int idx = line.indexOf("//");
-        if (idx >= 0) {
-            line = line.substring(0, idx);
-        }
-
-        // Remove simple /* ... */ segments on the same line
-        while (true) {
-            int start = line.indexOf("/*");
-            if (start < 0) break;
-            int end = line.indexOf("*/", start + 2);
-            if (end < 0) {
-                line = line.substring(0, start);
-                break;
-            } else {
-                line = line.substring(0, start) + " " + line.substring(end + 2);
-            }
-        }
-
-        String trimmed = line.trim();
-        trimmed = trimmed.replaceAll("\\s+", " ");
-        return trimmed;
+        String t = s.strip();
+        if (t.isEmpty()) return "";
+        t = t.replaceAll("[;{}]+$", "");
+        return t.strip();
     }
 
-    /**
-     * Noise = blank or brace/punctuation-only lines.
-     * Comments are NOT treated as noise; they are allowed as anchors/matches.
-     */
-    private static boolean isNoiseLine(String norm) {
-        String t = norm.trim();
-        if (t.isEmpty()) return true;
-        if (t.matches("[{};]+")) return true;
-        return false;
+    /** Tokenizer: split on non-alphanumeric. */
+    private static List<String> tokens(String s) {
+        return Arrays.stream(s.split("[^A-Za-z0-9_]+"))
+                .filter(x -> !x.isEmpty())
+                .toList();
     }
 
-    private static String[] tokenize(String s) {
-        if (s.isEmpty()) return new String[0];
-        String[] parts = s.split("[^A-Za-z0-9_]+");
-        List<String> toks = new ArrayList<>();
-        for (String p : parts) {
-            if (!p.isEmpty()) toks.add(p);
+    /** Jaccard similarity of characters. */
+    private static double surface(String a, String b) {
+        Set<Character> A = new HashSet<>();
+        Set<Character> B = new HashSet<>();
+        for (char c : a.toCharArray()) A.add(c);
+        for (char c : b.toCharArray()) B.add(c);
+        if (A.isEmpty() && B.isEmpty()) return 1.0;
+        Set<Character> inter = new HashSet<>(A);
+        inter.retainAll(B);
+        Set<Character> uni = new HashSet<>(A);
+        uni.addAll(B);
+        return (double) inter.size() / (double) uni.size();
+    }
+
+    /** Combined token + surface score. */
+    private static double score(String a, String b) {
+        if (a.equals(b)) return 1.0;
+
+        List<String> ta = tokens(a);
+        List<String> tb = tokens(b);
+
+        if (ta.isEmpty() || tb.isEmpty()) {
+            return surface(a, b);
         }
-        return toks.toArray(new String[0]);
+
+        int matches = 0;
+        for (String x : ta) {
+            if (tb.contains(x)) matches++;
+        }
+
+        double tokenSim = (double) matches / Math.max(ta.size(), tb.size());
+        double surf = surface(a, b);
+
+        return 0.7 * tokenSim + 0.3 * surf;
     }
 
-    /* ========================  LCS ANCHORS  ======================== */
-
-    private static int[] lcsAnchors(LineInfo[] orig, LineInfo[] news) {
-        int n = orig.length;
-        int m = news.length;
+    /** LCS anchors based on normalized lines. */
+    private static List<int[]> lcsAnchors(List<String> oldLines, List<String> newLines) {
+        int n = oldLines.size(), m = newLines.size();
         int[][] dp = new int[n + 1][m + 1];
 
-        for (int i = 1; i <= n; i++) {
-            String a = orig[i - 1].isNoise ? "" : orig[i - 1].norm;
-            for (int j = 1; j <= m; j++) {
-                String b = news[j - 1].isNoise ? "" : news[j - 1].norm;
-                if (!a.isEmpty() && a.equals(b)) {
-                    dp[i][j] = dp[i - 1][j - 1] + 1;
+        String[] A = new String[n];
+        String[] B = new String[m];
+        for (int i = 0; i < n; i++) A[i] = norm(oldLines.get(i));
+        for (int j = 0; j < m; j++) B[j] = norm(newLines.get(j));
+
+        for (int i = n - 1; i >= 0; i--) {
+            for (int j = m - 1; j >= 0; j--) {
+                if (!A[i].isEmpty() && A[i].equals(B[j])) {
+                    dp[i][j] = 1 + dp[i + 1][j + 1];
                 } else {
-                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                    dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
                 }
             }
         }
 
-        int[] map = new int[n];
-        Arrays.fill(map, -1);
-
-        int i = n, j = m;
-        while (i > 0 && j > 0) {
-            String a = orig[i - 1].isNoise ? "" : orig[i - 1].norm;
-            String b = news[j - 1].isNoise ? "" : news[j - 1].norm;
-            if (!a.isEmpty() && a.equals(b)) {
-                map[i - 1] = j - 1;
-                i--;
-                j--;
-            } else if (dp[i - 1][j] >= dp[i][j - 1]) {
-                i--;
+        List<int[]> anchors = new ArrayList<>();
+        int i = 0, j = 0;
+        while (i < n && j < m) {
+            if (!A[i].isEmpty() && A[i].equals(B[j])) {
+                anchors.add(new int[]{i, j});
+                i++; j++;
+            } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+                i++;
             } else {
-                j--;
+                j++;
+            }
+        }
+        return anchors;
+    }
+
+    /** Local search for best similarity match. */
+    private static int localSearch(List<String> oldLines, List<String> newLines,
+                                   int idx, int start, int end,
+                                   Set<Integer> used, double minScore) {
+
+        start = Math.max(start, 0);
+        end   = Math.min(end, newLines.size() - 1);
+
+        String target = oldLines.get(idx);
+        double best = minScore;
+        int bestPos = -1;
+
+        for (int j = start; j <= end; j++) {
+            if (used.contains(j)) continue;
+            double s = score(target, newLines.get(j));
+            if (s > best) {
+                best = s;
+                bestPos = j;
             }
         }
 
-        return map;
+        return bestPos;
     }
 
-    /* ========================  NEIGHBOR HELPERS  ======================== */
+    /** Try to detect moved blocks. */
+    private static void blockRelocate(List<String> oldLines, List<String> newLines,
+                                      int[] map, Set<Integer> used) {
 
-    private static int[] nearestMappedLeft(int[] map) {
-        int n = map.length;
-        int[] res = new int[n];
-        int last = -1;
-        for (int i = 0; i < n; i++) {
-            res[i] = last;
-            if (map[i] != -1) last = i;
-        }
-        return res;
-    }
+        int n = oldLines.size();
+        int window = 60;
 
-    private static int[] nearestMappedRight(int[] map) {
-        int n = map.length;
-        int[] res = new int[n];
-        int last = -1;
-        for (int i = n - 1; i >= 0; i--) {
-            res[i] = last;
-            if (map[i] != -1) last = i;
-        }
-        return res;
-    }
+        for (int i = 0; i < n; ) {
+            if (map[i] != -1) { i++; continue; }
 
-    /* ========================  GAP FILLING  ======================== */
+            int j = i;
+            while (j < n && map[j] == -1) j++;
+            int len = j - i;
 
-    private static void fillSmallGaps(LineInfo[] orig, LineInfo[] news,
-                                      int[] map, int[] usedCount) {
-        int n = map.length;
-        int m = news.length;
-
-        int i = 0;
-        while (i < n) {
-            if (map[i] != -1) {
-                i++;
+            if (len < 3) {
+                i = j;
                 continue;
             }
 
-            int start = i;
-            int end = i;
-            while (end + 1 < n && map[end + 1] == -1) {
-                end++;
-            }
-            int blockLen = end - start + 1;
+            int sStart = Math.max(0, i - window);
+            int sEnd   = Math.min(newLines.size() - 1, i + window);
 
-            // Only try to interpolate small blocks
-            if (blockLen <= 6) {
-                int left = start - 1;
-                int right = end + 1;
-                if (left >= 0 && right < n && map[left] != -1 && map[right] != -1) {
-                    int leftNew = map[left];
-                    int rightNew = map[right];
-                    if (rightNew > leftNew + 1) {
-                        int available = rightNew - leftNew - 1;
-                        if (available > 0) {
-                            for (int k = start; k <= end; k++) {
-                                int pos = k - start;
-                                int candidate = leftNew + 1 + Math.min(pos, available - 1);
-                                if (candidate < 0 || candidate >= m) continue;
+            double bestAvg = 0.0;
+            int bestPos = -1;
+            int bestHits = 0;
 
-                                if (news[candidate].isNoise && orig[k].isNoise) {
-                                    // For noise-on-noise, require exact norm match if present
-                                    if (!orig[k].norm.isEmpty()
-                                            && orig[k].norm.equals(news[candidate].norm)) {
-                                        map[k] = candidate;
-                                        usedCount[candidate]++;
-                                    }
-                                    continue;
-                                }
+            for (int pos = sStart; pos <= sEnd - len + 1; pos++) {
+                int hits = 0;
+                double sum = 0.0;
 
-                                if (news[candidate].isNoise) continue;
+                for (int k = 0; k < len; k++) {
+                    double sc = score(oldLines.get(i + k),
+                                      newLines.get(pos + k));
+                    if (sc > 0.4) {
+                        sum += sc;
+                        hits++;
+                    }
+                }
 
-                                double score = similarity(orig[k], news[candidate]);
-                                if (score <= 0.0) continue;
+                if (hits == 0) continue;
+                double avg = sum / len;
 
-                                boolean exactSameNorm = !orig[k].norm.isEmpty()
-                                        && orig[k].norm.equals(news[candidate].norm);
-
-                                double penalized = score;
-                                if (!exactSameNorm && usedCount[candidate] > 0) {
-                                    penalized -= 0.03 * Math.min(usedCount[candidate], 5);
-                                    if (penalized < 0.0) penalized = 0.0;
-                                }
-
-                                if (exactSameNorm || penalized >= 0.50) {
-                                    map[k] = candidate;
-                                    usedCount[candidate]++;
-                                }
-                            }
-                        }
+                if (avg > 0.45 && hits >= Math.max(2, (int)(0.6 * len))) {
+                    if (avg > bestAvg) {
+                        bestAvg = avg;
+                        bestPos = pos;
+                        bestHits = hits;
                     }
                 }
             }
 
-            i = end + 1;
-        }
-    }
-
-    /* ========================  SIMILARITY  ======================== */
-
-    private static double similarity(LineInfo a, LineInfo b) {
-        if (a.norm.isEmpty() && b.norm.isEmpty()) return 1.0;
-        if (a.norm.isEmpty() || b.norm.isEmpty()) return 0.0;
-
-        if (a.norm.equals(b.norm)) {
-            return 1.0;
-        }
-
-        double tokenSim = tokenDice(a.tokens, b.tokens);
-        double charSim  = charLCSRatio(a.norm, b.norm);
-
-        double base = 0.7 * tokenSim + 0.3 * charSim;
-
-        // Extra attention to RHS of assignments (often preserved)
-        if (a.norm.contains("=") && b.norm.contains("=")) {
-            String rhsA = rhs(a.norm);
-            String rhsB = rhs(b.norm);
-            if (!rhsA.isEmpty() && !rhsB.isEmpty()) {
-                String[] rtA = tokenize(rhsA);
-                String[] rtB = tokenize(rhsB);
-                double rhsToken = tokenDice(rtA, rtB);
-                double rhsChar  = charLCSRatio(rhsA, rhsB);
-                double rhsScore = 0.7 * rhsToken + 0.3 * rhsChar;
-                base = 0.5 * base + 0.5 * rhsScore;
+            if (bestPos != -1 && bestHits >= Math.max(2, (int)(0.6 * len))) {
+                for (int k = 0; k < len; k++) {
+                    int p = bestPos + k;
+                    if (!used.contains(p)) {
+                        map[i + k] = p;
+                        used.add(p);
+                    }
+                }
             }
+
+            i = j;
         }
-
-        return base;
     }
 
-    private static String rhs(String s) {
-        int idx = s.lastIndexOf('=');
-        if (idx < 0 || idx == s.length() - 1) return "";
-        return s.substring(idx + 1).trim();
-    }
+    /** Interpolate small gaps between anchors. */
+    private static void interpolate(int[] map) {
+        int n = map.length;
 
-    private static double tokenDice(String[] a, String[] b) {
-        if (a.length == 0 && b.length == 0) return 1.0;
-        if (a.length == 0 || b.length == 0) return 0.0;
+        for (int i = 0; i < n; ) {
+            if (map[i] != -1) { i++; continue; }
 
-        Map<String, Integer> fa = new HashMap<>();
-        Map<String, Integer> fb = new HashMap<>();
+            int start = i - 1;
+            while (i < n && map[i] == -1) i++;
+            int end = i;
 
-        for (String t : a) fa.put(t, fa.getOrDefault(t, 0) + 1);
-        for (String t : b) fb.put(t, fb.getOrDefault(t, 0) + 1);
+            if (start < 0 || end >= n) continue;
 
-        int inter = 0;
-        int sumA = 0, sumB = 0;
-        for (int v : fa.values()) sumA += v;
-        for (int v : fb.values()) sumB += v;
+            int left = map[start];
+            int right = map[end];
 
-        for (Map.Entry<String, Integer> e : fa.entrySet()) {
-            int va = e.getValue();
-            int vb = fb.getOrDefault(e.getKey(), 0);
-            inter += Math.min(va, vb);
-        }
+            if (left == -1 || right == -1) continue;
 
-        return (2.0 * inter) / (sumA + sumB);
-    }
+            int gapLen = end - start - 1;
+            int delta = right - left;
 
-    private static double charLCSRatio(String a, String b) {
-        if (a.isEmpty() && b.isEmpty()) return 1.0;
-        if (a.isEmpty() || b.isEmpty()) return 0.0;
-
-        int maxLen = 120;
-        if (a.length() > maxLen) a = a.substring(0, maxLen);
-        if (b.length() > maxLen) b = b.substring(0, maxLen);
-
-        int la = a.length();
-        int lb = b.length();
-        int[][] dp = new int[la + 1][lb + 1];
-
-        for (int i = 1; i <= la; i++) {
-            char ca = a.charAt(i - 1);
-            for (int j = 1; j <= lb; j++) {
-                char cb = b.charAt(j - 1);
-                if (ca == cb) {
-                    dp[i][j] = dp[i - 1][j - 1] + 1;
-                } else {
-                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            if (gapLen <= 3 && Math.abs(delta) <= 6 && delta > gapLen) {
+                double step = (double) delta / (double) (end - start);
+                for (int k = start + 1; k < end; k++) {
+                    int approx = (int) Math.round(left + step * (k - start));
+                    map[k] = approx;
                 }
             }
         }
+    }
 
-        int lcs = dp[la][lb];
-        int denom = Math.max(la, lb);
-        return (double) lcs / denom;
+    /** Main mapping pipeline. */
+    public static List<Mapping> compute(List<String> oldLines, List<String> newLines) {
+
+        int n = oldLines.size();
+        int[] map = new int[n];
+        Arrays.fill(map, -1);
+        Set<Integer> used = new HashSet<>();
+
+        // Step 1: Anchors via LCS
+        for (int[] a : lcsAnchors(oldLines, newLines)) {
+            int oi = a[0], ni = a[1];
+            if (!used.contains(ni)) {
+                map[oi] = ni;
+                used.add(ni);
+            }
+        }
+
+        // Step 2: Local matching around anchors
+        for (int i = 0; i < n; i++) {
+            if (map[i] != -1) continue;
+
+            int left = -1, right = -1;
+
+            for (int k = i - 1; k >= 0; k--) {
+                if (map[k] != -1) { left = map[k]; break; }
+            }
+            for (int k = i + 1; k < n; k++) {
+                if (map[k] != -1) { right = map[k]; break; }
+            }
+
+            int start = (left == -1) ? 0 : left - 20;
+            int end   = (right == -1) ? newLines.size() - 1 : right + 20;
+
+            int pos = localSearch(oldLines, newLines, i, start, end, used, 0.30);
+            if (pos != -1) {
+                map[i] = pos;
+                used.add(pos);
+            }
+        }
+
+        // Step 3: Block relocation
+        blockRelocate(oldLines, newLines, map, used);
+
+        // Step 4: Gap interpolation
+        interpolate(map);
+
+        // Step 5: Strict global fallback
+        for (int i = 0; i < n; i++) {
+            if (map[i] != -1) continue;
+
+            String raw = oldLines.get(i).strip();
+            if (raw.isEmpty() || raw.matches("[;{}]+")) continue;
+
+            int pos = localSearch(oldLines, newLines, i,
+                    0, newLines.size() - 1, used, 0.55);
+
+            if (pos != -1) {
+                map[i] = pos;
+                used.add(pos);
+            }
+        }
+
+        // Output
+        List<Mapping> out = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            out.add(new Mapping(i + 1, map[i] == -1 ? -1 : map[i] + 1));
+        }
+        return out;
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.err.println("Usage: java LineMappingTool oldFile newFile");
+            return;
+        }
+        List<String> oldLines = read(args[0]);
+        List<String> newLines = read(args[1]);
+
+        for (Mapping m : compute(oldLines, newLines)) {
+            System.out.println(m.oldLine() + "\t" + m.newLine());
+        }
     }
 }

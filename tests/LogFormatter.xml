@@ -1,0 +1,13 @@
+<TEST NAME="LogFormatter" FILE="LogFormatter.java">
+
+    <VERSION NUMBER="2" CHECKED="TRUE">
+        <LOCATION ORIG="1" NEW="1" />
+        <LOCATION ORIG="3" NEW="5" />
+        <LOCATION ORIG="5" NEW="7" />
+        <LOCATION ORIG="9" NEW="11" />
+        <LOCATION ORIG="13" NEW="15" />
+        <LOCATION ORIG="16" NEW="23" />
+    </VERSION>
+   
+   </TEST>
+   
