@@ -1,23 +1,27 @@
 class TextUtilsNew {
 
-    public static String reverse(String s) {
+    public static boolean isPalindrome(String s) {
+        return s.equals(reverse(s));
+    }
+
+    public static String reverse(String str) {
         StringBuilder sb = new StringBuilder();
-        for (int i = s.length() - 1; i >= 0; i--) {
-            sb.append(s.charAt(i));
+        for (int j = str.length() - 1; j >= 0; j--) {
+            sb.append(str.charAt(j));
         }
         return sb.toString();
     }
 
-    public static int countVowels(String s) {
+    public static int countVowels(String input) {
         int count = 0;
-        for (char c : s.toLowerCase().toCharArray()) {
-            if ("aeiou".indexOf(c) != -1) count++;
+        input = input.toLowerCase();
+        for (int k = 0; k < input.length(); k++) {
+            char ch = input.charAt(k);
+            if (ch == 'a' || ch == 'e' || ch == 'i' || ch == 'o' || ch == 'u') {
+                count++;
+            }
         }
         return count;
     }
 
-    public static boolean isPalindrome(String s) {
-        String rev = reverse(s);
-        return s.equals(rev);
-    }
 }
