@@ -1,18 +1,23 @@
 class TextUtilsOld {
 
     public static String reverse(String s) {
-        String result = "";
+        String r = "";
         for (int i = s.length() - 1; i >= 0; i--) {
-            result += s.charAt(i);
+            r = r + s.charAt(i);
         }
-        return result;
+        return r;
     }
 
     public static int countVowels(String s) {
-        int count = 0;
-        for (char c : s.toLowerCase().toCharArray()) {
-            if ("aeiou".indexOf(c) != -1) count++;
+        int v = 0;
+        s = s.toLowerCase();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') {
+                v++;
+            }
         }
-        return count;
+        return v;
     }
+
 }
