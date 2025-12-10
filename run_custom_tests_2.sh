@@ -1,3 +1,7 @@
+#!/usr/bin/env bash
+
+#PRINCE DATA SET
+
 set -e
 
 OUT="custom_outputs"
