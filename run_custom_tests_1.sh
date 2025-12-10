@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+#DEEP Data set
+
 # Custom group-test runner for COMP-3110 project.
 # This script runs 5 test pairs in a flat "tests" folder.
 #
