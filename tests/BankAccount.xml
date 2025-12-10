@@ -1,6 +1,6 @@
 <TEST NAME="BankAccount" FILE="BankAccount.java">
 
- <VERSION NUMBER="1" CHECKED="TRUE">
+ <VERSION NUMBER="2" CHECKED="TRUE">
  
    <LOCATION ORIG="230" NEW="232" />
    <LOCATION ORIG="231" NEW="233" />
