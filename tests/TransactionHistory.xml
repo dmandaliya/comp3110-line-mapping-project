@@ -1,6 +1,6 @@
 <TEST NAME="TransactionHistory" FILE="TransactionHistory.java">
 
- <VERSION NUMBER="1" CHECKED="TRUE">
+ <VERSION NUMBER="2" CHECKED="TRUE">
  
    <LOCATION ORIG="50" NEW="53" />
    <LOCATION ORIG="51" NEW="54" />
