@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Custom group-test runner for Deep's COMP-3110 project.
-# This script runs YOUR 5 test pairs in a flat "tests" folder.
+# Custom group-test runner for COMP-3110 project.
+# This script runs 5 test pairs in a flat "tests" folder.
 #
 # EXPECTED FILES:
 #   tests/TMTasks_1.java       (old)
