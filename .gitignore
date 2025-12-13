@@ -1,5 +1,11 @@
-.DS_Store
-out/
-eclipseTest/
+# Compiled files
 *.class
 
+# Generated outputs
+eclipseTestResults/
+groupTestResults/
+custom_outputs/
+out/
+
+# OS junk
+.DS_Store

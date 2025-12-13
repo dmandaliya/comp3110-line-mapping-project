@@ -1,4 +1,3 @@
-package mytool.dataset;
 
 public class MathUtils {
 
