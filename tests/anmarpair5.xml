@@ -1,0 +1,12 @@
+<TEST NAME="anmarFile5" FILE="anmarOldFile5.java">
+
+    <VERSION NUMBER="2" CHECKED="TRUE" NEWFILE="anmarNewFile5.java">
+
+        <LOCATION ORIG="1" NEW="1" />
+        <LOCATION ORIG="3" NEW="3" />
+        <LOCATION ORIG="4" NEW="5" />
+        <LOCATION ORIG="5" NEW="6" />
+
+    </VERSION>
+
+</TEST>
