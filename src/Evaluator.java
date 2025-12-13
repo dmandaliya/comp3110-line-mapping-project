@@ -20,8 +20,8 @@ import org.w3c.dom.NodeList;
  * Evaluator for COMP-3110 line mapping project.
  *
  * Compares:
- *   1) Your tool's output  (oldLine newLine, one per line)
- *   2) Professor's XML file (with <VERSION NUMBER="2"> and <LOCATION ORIG= NEW=>)
+ *   1) Tool's output  (oldLine newLine, one per line)
+ *   2) XML file (with <VERSION NUMBER="2"> and <LOCATION ORIG= NEW=>)
  *
  * and classifies each ORIG line as:
  *   - CORRECT  : tool mapping matches one of the gold NEW values (supports ALT)
@@ -76,7 +76,7 @@ public class Evaluator {
     }
 
     /**
-     * Reads the professor's XML file and extracts VERSION NUMBER="2"
+     * Reads the XML file and extracts VERSION NUMBER="2"
      * into a mapping ORIG -> list of acceptable NEW values.
      * If the same ORIG appears multiple times, we treat all of its NEW values
      * as valid (this supports ALT mappings).
@@ -118,7 +118,7 @@ public class Evaluator {
     }
 
     /**
-     * Compare your mapping vs gold and print classification for each ORIG.
+     * Compare mapping vs gold and print classification for each ORIG.
      */
     private static void evaluate(Map<Integer, Integer> tool, GoldMapping gold) {
         int correct = 0;
