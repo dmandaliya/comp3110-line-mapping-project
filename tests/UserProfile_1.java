@@ -3,14 +3,14 @@ package mytool.dataset;
 import java.time.LocalDate;
 import java.util.Objects;
 
-public class UserProfile {
+public class UserProfile_1 {
 
     private final String username;
     private final String email;
     private LocalDate createdAt;
     private boolean active;
 
-    public UserProfile(String username, String email) {
+    public UserProfile_1(String username, String email) {
         this.username = Objects.requireNonNull(username, "username");
         this.email = Objects.requireNonNull(email, "email");
         this.createdAt = LocalDate.now();

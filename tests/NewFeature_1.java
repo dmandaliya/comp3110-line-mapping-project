@@ -1,9 +1,9 @@
-public class NewFeature {
+public class NewFeature_1 {
 
     private int counter;
     private String status;
 
-    public NewFeature() {
+    public NewFeature_1() {
         this.counter = 0;
         this.status = "INIT";
     }

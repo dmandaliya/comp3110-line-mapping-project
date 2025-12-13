@@ -1,13 +1,13 @@
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
 /**
  * COMP-3110 Line Mapping Tool
  *
- * Light comments: explains structure without excessive detail.
  * Strategy:
  *  - Step 1: Preprocess lines + normalize
  *  - Step 2: Identify strong "unchanged" anchors using LCS
@@ -15,6 +15,13 @@ import java.util.*;
  *  - Step 4: Block relocation for large moved sections
  *  - Step 5: Small-gap interpolation
  *  - Step 6: Strict global fallback for remaining lines
+ *
+ * IMPORTANT:
+ *  - This tool does NOT depend on XML.
+ *  - It always produces a full mapping: for each old line i (1-based),
+ *    it outputs "i<TAB>mappedLineOrMinus1".
+ *  - XML is only used later by Evaluator to compute accuracy on the
+ *    subset of lines listed there.
  */
 public class LineMappingTool {
 
@@ -31,6 +38,7 @@ public class LineMappingTool {
         if (s == null) return "";
         String t = s.strip();
         if (t.isEmpty()) return "";
+        // strip trailing braces / semicolons which often move alone
         t = t.replaceAll("[;{}]+$", "");
         return t.strip();
     }
@@ -295,7 +303,7 @@ public class LineMappingTool {
             }
         }
 
-        // Output
+        // Output mapping for EVERY old line
         List<Mapping> out = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             out.add(new Mapping(i + 1, map[i] == -1 ? -1 : map[i] + 1));
@@ -303,16 +311,45 @@ public class LineMappingTool {
         return out;
     }
 
+    /**
+     * main():
+     *  Usage:
+     *    java LineMappingTool oldFile newFile
+     *      -> prints mapping to stdout (for prof's Evaluator / pipes)
+     *
+     *    java LineMappingTool oldFile newFile outputFile
+     *      -> writes mapping to outputFile (e.g. eclipseTestResults/GC.map)
+     *         AND prints nothing else except a small "Saved mapping" line.
+     */
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
-            System.err.println("Usage: java LineMappingTool oldFile newFile");
+            System.err.println("Usage: java LineMappingTool oldFile newFile [outputFile]");
             return;
         }
+
         List<String> oldLines = read(args[0]);
         List<String> newLines = read(args[1]);
 
-        for (Mapping m : compute(oldLines, newLines)) {
-            System.out.println(m.oldLine() + "\t" + m.newLine());
+        List<Mapping> mappings = compute(oldLines, newLines);
+
+        StringBuilder sb = new StringBuilder();
+        for (Mapping m : mappings) {
+            sb.append(m.oldLine())
+              .append('\t')
+              .append(m.newLine())
+              .append('\n');
+        }
+
+        if (args.length == 3) {
+            Path outPath = Paths.get(args[2]);
+            Path parent = outPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.write(outPath, sb.toString().getBytes(StandardCharsets.UTF_8));
+            System.out.println("Saved mapping to: " + outPath.toString());
+        } else {
+            System.out.print(sb.toString());
         }
     }
 }
