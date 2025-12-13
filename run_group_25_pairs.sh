@@ -19,7 +19,7 @@ run_test () {
 }
 
 # =============================
-# YOUR PAIRS (already in tests/)
+# DEEP PAIRS (already in tests/)
 # =============================
 run_test TMTasks        tests/TMTasks_1.java        tests/TaskManager.java        tests/TMTasks.xml
 run_test UserProfile    tests/UserProfile_1.java    tests/UserProfile_2.java      tests/UserProfile.xml
@@ -37,20 +37,26 @@ run_test anmarpair3 tests/anmarOldFile3.java tests/anmarNewFile3.java tests/anma
 run_test anmarpair4 tests/anmarOldFile4.java tests/anmarNewFile4.java tests/anmarpair4.xml
 run_test anmarpair5 tests/anmarOldFile5.java tests/anmarNewFile5.java tests/anmarpair5.xml
 
-# =============================
-# PLACEHOLDERS (paste new lines when they upload)
-# =============================
-# Example format:
-# run_test <name> tests/<old>.java tests/<new>.java tests/<xml>.xml
+# ===============================
+# PRINCE PAIRS: (already in tests/)
+# ===============================
+run_test MainAcc tests/MainAcc_1.java tests/MainAcc_2.java tests/MainAcc.xml
+run_test BankAccount tests/BankAccount_1.java tests/BankAccount_2.java tests/BankAccount.xml
+run_test BankAccountTransaction tests/BankAccountTransaction_1.java tests/BankAccountTransaction_2.java tests/BankAccountTransaction.xml
+run_test TransactionHistory tests/TransactionHistory_1.java tests/TransactionHistory_2.java tests/TransactionHistory.xml
+run_test UserCreate tests/UserCreate_1.java tests/UserCreate_2.java tests/UserCreate.xml
 
-# Amar:
+# ===============================
+# AMMAR PAIRS:
+# ===============================
 # run_test amar1 tests/amarOld1.java tests/amarNew1.java tests/amarpair1.xml
 
-# Prince:
-# run_test prince1 tests/princeOld1.java tests/princeNew1.java tests/princepair1.xml
 
-# Farmer:
+# ===============================
+# HUZAIFAH PAIRS:
+# ===============================
 # run_test farmer1 tests/farmerOld1.java tests/farmerNew1.java tests/farmerpair1.xml
+
 
 echo "=============================="
 echo "GROUP DATASET COMPLETED"
