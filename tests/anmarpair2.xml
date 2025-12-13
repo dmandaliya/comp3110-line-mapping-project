@@ -1,0 +1,21 @@
+<TEST NAME="anmarFile2" FILE="anmarOldFile2.java">
+
+    <VERSION NUMBER="2" CHECKED="TRUE" NEWFILE="anmarNewFile2.java">
+
+        <LOCATION ORIG="1" NEW="1" />
+        <LOCATION ORIG="3" NEW="3" />
+        <LOCATION ORIG="4" NEW="4" />
+        <LOCATION ORIG="6" NEW="6" />
+        <LOCATION ORIG="7" NEW="7" />
+        <LOCATION ORIG="8" NEW="8" />
+        <LOCATION ORIG="9" NEW="9" />
+        <LOCATION ORIG="11" NEW="11" />
+        <LOCATION ORIG="12" NEW="17" />
+        <LOCATION ORIG="15" NEW="15" />
+        <LOCATION ORIG="16" NEW="17" />
+        <LOCATION ORIG="19" NEW="23" />
+        <LOCATION ORIG="20" NEW="24" />
+
+    </VERSION>
+
+</TEST>
