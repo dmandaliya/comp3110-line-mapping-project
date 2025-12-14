@@ -42,7 +42,9 @@ Run the instructor dataset:
 Run the custom dataset:
 
 ```
-./run_custom_tests.sh
+chmod +x run_group_25_pairs.sh
+
+./run_group_25_pairs.sh
 ```
 
 Or run the tool manually:
@@ -59,7 +61,7 @@ java LineMappingTool old.java new.java
 Located in `eclipseTest/` and contains 25 file pairs with XML files defining the expected mappings.
 
 **Custom dataset**
-Located in `tests/` and includes:
+Located in `tests/` and includes but not limited to:
 
 * TMTasks
 * UserProfile
