@@ -15,7 +15,7 @@ run_test () {
   echo "  Running LineMappingTool..."
   java -cp src LineMappingTool "$OLD" "$NEW" "eclipseTestResults/$NAME.map"
   echo "  Evaluating with Evaluator..."
-  cat "eclipseTestResults/$NAME.map" | java -cp src Evaluator "$XML"
+  java -cp src Evaluator "eclipseTestResults/$NAME.map" "$XML"
 }
 
 # Professor Eclipse dataset (eclipseTest/)

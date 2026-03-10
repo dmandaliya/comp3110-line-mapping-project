@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Line Mapping Tool - COMP 3110</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>📊 Line Mapping Tool</h1>
+                <p class="subtitle">Visualize code evolution between file versions</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <div class="upload-container">
+                    <div class="upload-box">
+                        <div class="upload-icon">📄</div>
+                        <h3>Old Version</h3>
+                        <label for="oldFile" class="file-label">
+                            <span class="file-button">Choose File</span>
+                            <span class="file-name" id="oldFileName">No file selected</span>
+                        </label>
+                        <input type="file" id="oldFile" accept=".java,.js,.py,.txt,.c,.cpp,.h,.cs" class="file-input">
+                    </div>
+
+                    <div class="upload-divider">
+                        <div class="arrow">→</div>
+                    </div>
+
+                    <div class="upload-box">
+                        <div class="upload-icon">📄</div>
+                        <h3>New Version</h3>
+                        <label for="newFile" class="file-label">
+                            <span class="file-button">Choose File</span>
+                            <span class="file-name" id="newFileName">No file selected</span>
+                        </label>
+                        <input type="file" id="newFile" accept=".java,.js,.py,.txt,.c,.cpp,.h,.cs" class="file-input">
+                    </div>
+                </div>
+
+                <button id="compareBtn" class="compare-button" disabled>
+                    <span class="button-icon">🔍</span>
+                    Compare Files
+                </button>
+            </section>
+
+            <!-- Visualization Controls -->
+            <section class="controls-section" id="controlsSection" style="display: none;">
+                <div class="controls-container">
+                    <div class="control-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="showMappings" checked>
+                            <span class="toggle-slider"></span>
+                            Show Line Mappings
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="highlightChanges" checked>
+                            <span class="toggle-slider"></span>
+                            Highlight Changes
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="showDeleted" checked>
+                            <span class="toggle-slider"></span>
+                            Show Deleted Lines
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="showInserted" checked>
+                            <span class="toggle-slider"></span>
+                            Show Inserted Lines
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <button id="exportBtn" class="export-button">
+                            📥 Export Mapping
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Statistics Panel -->
+            <section class="stats-section" id="statsSection" style="display: none;">
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div class="stat-icon unchanged">✓</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="unchangedCount">0</div>
+                            <div class="stat-label">Unchanged</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon changed">↻</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="changedCount">0</div>
+                            <div class="stat-label">Changed</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon deleted">✗</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="deletedCount">0</div>
+                            <div class="stat-label">Deleted</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon inserted">+</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="insertedCount">0</div>
+                            <div class="stat-label">Inserted</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Comparison View -->
+            <section class="comparison-section" id="comparisonSection" style="display: none;">
+                <div class="comparison-container">
+                    <div class="file-panel old-file-panel">
+                        <div class="panel-header">
+                            <h3>Old Version</h3>
+                            <span class="line-count" id="oldLineCount">0 lines</span>
+                        </div>
+                        <div class="code-view" id="oldCodeView">
+                            <!-- Code will be inserted here -->
+                        </div>
+                    </div>
+
+                    <svg class="mapping-canvas" id="mappingCanvas">
+                        <!-- SVG lines will be drawn here -->
+                    </svg>
+
+                    <div class="file-panel new-file-panel">
+                        <div class="panel-header">
+                            <h3>New Version</h3>
+                            <span class="line-count" id="newLineCount">0 lines</span>
+                        </div>
+                        <div class="code-view" id="newCodeView">
+                            <!-- Code will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Legend -->
+            <section class="legend-section" id="legendSection" style="display: none;">
+                <div class="legend-container">
+                    <h4>Legend</h4>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <div class="legend-color unchanged"></div>
+                            <span>Unchanged Line</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color changed"></div>
+                            <span>Changed Line</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color deleted"></div>
+                            <span>Deleted Line</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color inserted"></div>
+                            <span>Inserted Line</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line"></div>
+                            <span>Line Mapping</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>COMP 3110 - Line Mapping Project | University Project</p>
+        </footer>
+    </div>
+
+    <script src="lineMappingEngine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

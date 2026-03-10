@@ -15,7 +15,7 @@ run_test () {
   echo "  Running LineMappingTool..."
   java -cp src LineMappingTool "$OLD" "$NEW" "groupTestResults/$NAME.map"
   echo "  Evaluating with Evaluator..."
-  cat "groupTestResults/$NAME.map" | java -cp src Evaluator "$XML"
+  java -cp src Evaluator "groupTestResults/$NAME.map" "$XML"
 }
 
 # =============================
